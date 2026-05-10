@@ -4,6 +4,7 @@ import { env } from './env.js';
 import { sessionsRoutes } from './routes/sessions.js';
 import { stormRoutes } from './routes/storm.js';
 import { pitchRoutes } from './routes/pitch.js';
+import { devRoutes } from './routes/dev.js';
 
 /**
  * Construye la instancia Fastify con todos los plugins/rutas registrados y
@@ -39,6 +40,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.log.warn(
       '🧪 MOCK_MODE activo: repo en memoria + LLM canned. Los datos se pierden al reiniciar.',
     );
+    await app.register(devRoutes);
   }
 
   await app.register(sessionsRoutes);
