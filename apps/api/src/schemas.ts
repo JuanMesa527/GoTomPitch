@@ -67,14 +67,37 @@ const CommercialApproachSchema = z
   .partial();
 
 /**
+ * Slug determinístico para derivar `clientId` cuando el pipeline upstream no lo trae
+ * (caso típico del payload de Qualify, que solo manda `business_name` + `rank`).
+ * Evita colisiones razonables agregando el rank al final si está presente.
+ */
+function slugify(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'cliente';
+}
+
+/**
  * Forma estandarizada del prospecto al que se le va a hacer pitch.
  * Mezcla campos legacy (name, recentNews, painPoints) con la forma actual del pipeline
  * (snake_case + secciones business_intelligence / commercial_approach / etc.).
+ *
+ * Tolera dos shapes de entrada:
+ *  - Legacy/manual: `clientId` + `name` explícitos.
+ *  - Pipeline upstream (Qualify): `business_name` (+ `rank` opcional) sin clientId/name.
+ *
+ * El `.transform` final garantiza que aguas abajo siempre haya un `clientId` y un
+ * `name` poblados, así nadie en el back tiene que hacer ?? defensivo.
  */
 export const ClientSnapshotSchema = z
   .object({
-    clientId: z.string(),
-    name: z.string(),
+    clientId: z.string().optional(),
+    name: z.string().optional(),
+    business_name: z.string().optional(),
 
     // Legacy / planos
     website: z.string().url().optional(),
@@ -109,7 +132,22 @@ export const ClientSnapshotSchema = z
     business_intelligence: BusinessIntelligenceSchema.optional(),
     commercial_approach: CommercialApproachSchema.optional(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((snap, ctx) => {
+    if (!snap.name && !snap.business_name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'El snapshot debe traer `name` o `business_name`.',
+        path: ['name'],
+      });
+    }
+  })
+  .transform((snap) => {
+    const name = snap.name ?? snap.business_name!;
+    const clientId =
+      snap.clientId ?? `${slugify(name)}${typeof snap.rank === 'number' ? `-r${snap.rank}` : ''}`;
+    return { ...snap, name, clientId };
+  });
 export type ClientSnapshot = z.infer<typeof ClientSnapshotSchema>;
 
 export const CardCategory = z.enum(['opportunity', 'tip', 'critical', 'risk']);
@@ -130,13 +168,20 @@ export const PitchItemSchema = z.object({
 });
 export type PitchItem = z.infer<typeof PitchItemSchema>;
 
-export const CreateSessionSchema = z.object({
-  clientId: z.string().min(1),
-  clientSnapshot: ClientSnapshotSchema,
-  // Quién es dueño de la sesión. Opcional para no romper flujos legacy / MOCK_MODE sin auth,
-  // pero el front lo manda siempre que haya usuario logueado.
-  userId: z.string().uuid().optional(),
-});
+export const CreateSessionSchema = z
+  .object({
+    // Permitido (y preferido) cuando el caller ya tiene un id estable. Si no viene,
+    // se cae al `clientId` derivado por `ClientSnapshotSchema` (slug del business_name).
+    clientId: z.string().min(1).optional(),
+    clientSnapshot: ClientSnapshotSchema,
+    // Quién es dueño de la sesión. Opcional para no romper flujos legacy / MOCK_MODE sin auth,
+    // pero el front lo manda siempre que haya usuario logueado.
+    userId: z.string().uuid().optional(),
+  })
+  .transform((data) => ({
+    ...data,
+    clientId: data.clientId ?? data.clientSnapshot.clientId,
+  }));
 
 export const PatchPitchSchema = z.object({
   items: z.array(PitchItemSchema),
