@@ -27,7 +27,6 @@ INTERNAL_API_KEY=dev-key-cualquiera
 - No requiere Supabase ni DeepSeek.
 - Repo en memoria (datos volátiles).
 - LLM canned con delay artificial (`MOCK_LLM_DELAY_MS`, default 350ms) — el front ve streaming SSE real.
-- Endpoint extra `POST /dev/sessions/sample` que crea una sesión con el fixture sin payload.
 - El front detecta el modo vía `/health` y muestra un chip 🧪 **mock mode**.
 
 ### 🚀 Real (Supabase + DeepSeek)
@@ -53,7 +52,7 @@ INTERNAL_API_KEY=<el mismo del back>
 npm run dev
 ```
 
-Abrí http://localhost:3000/cards y pulsá **«Probar con cliente de ejemplo»**.
+Creá sesiones con `POST /sessions` y el `clientSnapshot` que envía el pipeline (ver tabla de contratos).
 
 ### 1. Supabase (modo real)
 
@@ -88,17 +87,14 @@ Todos requieren `x-api-key: $INTERNAL_API_KEY` y opcionalmente `x-user-id: <uuid
 | Método | Ruta | Body | Respuesta |
 |---|---|---|---|
 | GET   | `/health`                              | —                                | `{ ok, mockMode }` |
-| POST  | `/sessions`                            | `{ clientId, clientSnapshot }`   | `{ sessionId }` |
+| POST  | `/sessions`                            | `{ clientSnapshot, clientId? }`   | `{ sessionId }` |
 | GET   | `/sessions/:id`                        | —                                | `{ session, cards, pitch }` |
 | GET   | `/sessions/:id/storm`                  | — (SSE)                          | `event: card`, `event: done` |
 | POST  | `/sessions/:id/storm/regenerate`       | —                                | `{ ok: true }` |
 | PATCH | `/sessions/:id/pitch`                  | `{ items: [{cardId, position, note?}] }` | `{ ok: true }` |
 | POST  | `/sessions/:id/pitch/generate`         | `{ instructions? }`              | `{ pitch, markdown }` |
 | GET   | `/sessions/:id/export`                 | —                                | `text/markdown` |
-| POST  | `/dev/sessions/sample` (solo mock)     | —                                | `{ sessionId }` |
-
-Forma de `clientSnapshot` — ver `apps/api/src/schemas.ts` (`ClientSnapshotSchema`).
-Fixture de ejemplo en `apps/api/fixtures/sample-client.json`.
+Forma de `clientSnapshot` — ver `apps/api/src/schemas.ts` (`ClientSnapshotSchema`). El pipeline puede mandar el prospecto con `business_name` (sin `clientId`; se deriva en el back).
 
 ---
 

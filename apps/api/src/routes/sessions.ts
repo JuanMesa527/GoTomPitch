@@ -1,11 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { env } from '../env.js';
 import { repo } from '../repo/index.js';
 import { CreateSessionSchema } from '../schemas.js';
 import { canAccessSession, getUserId } from '../auth.js';
-// Fixture importado estáticamente: así Vercel lo bundlea con el código y no
-// dependemos de filesystem relativo (que rompe al empaquetar la function).
-import sampleClient from '../../fixtures/sample-client.json' with { type: 'json' };
 
 export async function sessionsRoutes(app: FastifyInstance) {
   app.post('/sessions', async (req, reply) => {
@@ -50,23 +46,4 @@ export async function sessionsRoutes(app: FastifyInstance) {
       pitch,
     });
   });
-
-  /**
-   * Solo en MOCK_MODE: crea una sesión usando el fixture del repo, sin que el front
-   * tenga que conocer el shape del snapshot. Útil para QA manual.
-   */
-  if (env.MOCK_MODE) {
-    app.post('/dev/sessions/sample', async (req, reply) => {
-      const parsed = CreateSessionSchema.safeParse(sampleClient);
-      if (!parsed.success) {
-        return reply.code(500).send({ error: 'fixture_invalid', issues: parsed.error.issues });
-      }
-      const { id } = await repo.createSession({
-        clientId: parsed.data.clientId,
-        clientSnapshot: parsed.data.clientSnapshot,
-        userId: parsed.data.userId ?? getUserId(req),
-      });
-      return reply.code(201).send({ sessionId: id });
-    });
-  }
 }
