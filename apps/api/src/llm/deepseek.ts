@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { OpenAI } from 'openai';
 import { env } from '../env.js';
 import {
   CardSchema,
